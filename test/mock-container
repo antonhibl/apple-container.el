@@ -1,0 +1,40 @@
+#!/bin/bash
+# Fake `container` CLI for tests. Records calls; serves fixture JSON.
+echo "$*" >> "${MOCK_LOG:-/dev/null}"
+case "$1 $2" in
+  "list --format"|"ls --format")
+    if [[ " $* " == *" --all "* ]]; then
+cat <<'J'
+[{"configuration":{"capAdd":[],"creationDate":"2026-10-15T10:00:00Z","id":"web","image":{"reference":"docker.io/library/nginx:latest"},"platform":{"architecture":"arm64","os":"linux"},"publishedPorts":[{"containerPort":80,"count":1,"hostAddress":"0.0.0.0","hostPort":8080,"proto":"tcp"}],"resources":{"cpus":4,"memoryInBytes":1073741824}},"id":"web","status":{"networks":[{"hostname":"web","ipv4Address":"192.168.64.3/24","ipv4Gateway":"192.168.64.1","network":"default"}],"startedDate":"2026-10-15T10:00:05Z","state":"running"}},
+ {"configuration":{"id":"db","image":{"reference":"docker.io/library/postgres:17"},"platform":{"architecture":"arm64","os":"linux"},"resources":{"cpus":2,"memoryInBytes":2147483648}},"status":"stopped","networks":[],"startedDate":782000000}]
+J
+    else
+cat <<'J'
+[{"configuration":{"id":"web","image":{"reference":"docker.io/library/nginx:latest"},"platform":{"architecture":"arm64","os":"linux"},"publishedPorts":[],"resources":{"cpus":4,"memoryInBytes":1073741824}},"id":"web","status":{"networks":[],"state":"running"}}]
+J
+    fi ;;
+  "image list"|"image ls")
+cat <<'J'
+[{"id":"abc","configuration":{"name":"docker.io/library/nginx:latest","creationDate":"2026-10-01T00:00:00Z","descriptor":{"digest":"sha256:0123456789abcdef0123","size":10000}},"variants":[{"platform":{"os":"linux","architecture":"amd64"},"digest":"x","size":90000000},{"platform":{"os":"linux","architecture":"arm64"},"digest":"y","size":70000000}]},
+ {"reference":"ghcr.io/me/app@sha256:feedface","descriptor":{"digest":"sha256:feedface","size":5}}]
+J
+  ;;
+  "volume list"|"volume ls")
+    echo '[{"id":"data","configuration":{"name":"data","driver":"local","format":"ext4","source":"/x","creationDate":"2026-10-02T00:00:00Z","labels":{},"options":{},"sizeInBytes":536870912}},{"id":"anon1","configuration":{"name":"anon1","driver":"local","labels":{"com.apple.container.resource.anonymous":""},"options":{}}}]' ;;
+  "network list"|"network ls")
+    echo '[{"id":"default","configuration":{"name":"default","creationDate":"2026-10-02T00:00:00Z"},"status":{"ipv4Subnet":"192.168.64.0/24","ipv4Gateway":"192.168.64.1"}}]' ;;
+  "inspect "*) echo '[{"id":"'"$2"'","nested":{"a":[1,2]}}]' ;;
+  "logs "*) printf 'line one\n\033[31mred line\033[0m\nlast line\n' ;;
+  "system status") echo "apiserver is running" ;;
+  "system version") echo '[{"appName":"container","version":"1.4.1"},{"appName":"container-apiserver","version":"container-apiserver version 1.4.1"}]' ;;
+  "stop broken") echo "Error: XPC connection error: Connection invalid" >&2; exit 1 ;;
+  "exec "*)
+    shift
+    while [[ "$1" == -* ]]; do
+      if [[ "$1" == "-u" || "$1" == "--user" ]]; then shift; fi
+      shift
+    done
+    shift   # container id
+    exec "$@" ;;
+  *) : ;;
+esac
